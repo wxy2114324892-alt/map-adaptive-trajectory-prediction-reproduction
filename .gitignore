@@ -1,0 +1,19 @@
+# Python environment
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Datasets and generated files
+/data/
+checkpoints/
+outputs/
+*.pth
+*.pt
+*.ckpt
+
+# Editors and system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
