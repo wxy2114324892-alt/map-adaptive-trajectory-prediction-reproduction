@@ -10,6 +10,7 @@ def main() -> None:
 
     # Six graph nodes, each represented by a 64-D feature.
     node_features = torch.randn(6, 64, device=device)
+    node_features[5] = node_features[0].clone()
 
     # Stage 1: neighbor CCL -> neighbor agent.
     stage1_edges = torch.tensor(
