@@ -18,11 +18,12 @@ class MapAdaptiveTrajectoryPredictor(nn.Module):
         hidden_dim: int = 128,
         future_steps: int = 30,
         heads: int = 4,
+        agent_input_dim: int | None = None,
     ) -> None:
         super().__init__()
 
         self.agent_encoder = AgentHistoryEncoder(
-            input_dim=input_dim,
+            input_dim=agent_input_dim or input_dim,
             hidden_dim=feature_dim,
         )
 
@@ -57,7 +58,11 @@ class MapAdaptiveTrajectoryPredictor(nn.Module):
         """Predict multimodal trajectories for one scene."""
 
         agent_features = self.agent_encoder(agent_histories)
-        centerline_features = self.centerline_encoder(centerlines)
+        centerline_features = (
+            self.centerline_encoder(centerlines)
+            if centerlines.shape[0]
+            else agent_features.new_empty((0, agent_features.shape[1]))
+        )
 
         target_feature = agent_features[
             target_agent_index : target_agent_index + 1
