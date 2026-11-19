@@ -77,6 +77,13 @@ The model was trained on successfully processed **Argoverse 1 Motion Forecasting
 
 The 12 scenes were randomly selected using seed 2026; they were not selected for model performance. **Blue** shows observed target history, **light blue** shows other agents' history, **gray dashed** shows target CCLs, **orange** shows predictions, and **green** shows the recorded future. Each scene is displayed in its own local coordinates. See [the experiment report](docs/TRAINING_RESULTS.md) for details. The figures illustrate individual cases; they do not replace the validation-set metrics above.
 
+### Validation error distribution
+
+Across the 39,468 processed validation scenes, median minADE was **1.35 m** and median minFDE was **2.50 m**; the 90th-percentile minFDE was **6.86 m**. With a 2 m endpoint threshold, **60.35%** of scenes had no predicted endpoint within that distance of the recorded endpoint. This is not a collision rate, and the variable-mode validation results are not directly comparable with the paper's fixed-six-mode test benchmark.
+
+![Cumulative validation error distributions](docs/figures/validation_error_distribution.png)
+
+See [the detailed analysis](docs/TRAINING_RESULTS.md#validation-error-distribution) for definitions and the command to recompute it.
 ## Repository guide
 
 ```text
