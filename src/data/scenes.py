@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from src.data.argoverse_loader import load_agent_trajectory, load_scene_histories, align_to_target_heading
+from src.data.argoverse_loader import load_agent_trajectory, load_scene_histories, align_to_target_heading, estimate_heading, history_quality
 
 
 def resample(line, count=30):
@@ -19,7 +19,7 @@ def resample(line, count=30):
     return np.stack([np.interp(samples, distance, line[:, i]) for i in range(2)], axis=1)
 
 
-def prepare_scene(path, amap):
+def prepare_scene(path, amap, heading_strategy="legacy"):
     path = Path(path)
     history, future, origin = load_agent_trajectory(path)
     histories, ids, types, scene_origin = load_scene_histories(path)
@@ -40,13 +40,16 @@ def prepare_scene(path, amap):
                 line = (torch.tensor(resample(candidate), dtype=torch.float64) - origin).float()
             except ValueError:
                 continue
-            lines.append(align_to_target_heading(line, history))
+            lines.append(align_to_target_heading(line, history, heading_strategy))
             owners.append(owner)
-    return {'id': path.stem, 'histories': align_to_target_heading(histories, history),
-            'future': align_to_target_heading(future, history),
+    return {'id': path.stem, 'histories': align_to_target_heading(histories, history, heading_strategy),
+            'future': align_to_target_heading(future, history, heading_strategy),
             'centerlines': torch.stack(lines) if lines else torch.empty(0, 30, 2),
             'owners': owners, 'origin': origin, 'city': city, 'track_ids': ids,
-            'intervals': torch.tensor(intervals, dtype=torch.float32)}
+            'intervals': torch.tensor(intervals, dtype=torch.float32),
+            'heading_strategy': heading_strategy,
+            'heading_source': estimate_heading(history, heading_strategy)[1],
+            'history_quality': history_quality(history, torch.tensor(intervals, dtype=torch.float32))}
 
 
 def graph(scene, device):

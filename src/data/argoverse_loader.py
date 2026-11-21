@@ -148,33 +148,62 @@ def load_scene_histories(
 
     return histories_tensor, track_ids, object_types, origin
 
+def estimate_heading(target_history: torch.Tensor, strategy: str = "legacy") -> tuple[torch.Tensor, str]:
+    """Estimate heading from observed positions only; robust mode is opt-in."""
+    if target_history.shape[0] < 11 and strategy == "robust":
+        raise ValueError("Robust heading requires at least eleven history points.")
+    if target_history.shape[0] < 5:
+        raise ValueError("At least five history points are required.")
+    if strategy not in ("legacy", "robust"):
+        raise ValueError(f"Unknown heading strategy: {strategy}")
+    short = target_history[-1] - target_history[-5]
+    if strategy == "legacy":
+        return torch.atan2(short[1], short[0]), "short"
+    long = target_history[-1] - target_history[-11]
+    short_norm = torch.linalg.vector_norm(short)
+    long_norm = torch.linalg.vector_norm(long)
+    if short_norm >= 0.5:
+        if long_norm >= 0.5:
+            cosine = torch.dot(short, long) / (short_norm * long_norm)
+            if cosine < 0.5:  # More than 60 degrees apart.
+                return torch.atan2(long[1], long[0]), "long_disagreement"
+        return torch.atan2(short[1], short[0]), "short"
+    if long_norm >= 0.5:
+        return torch.atan2(long[1], long[0]), "long_small_displacement"
+    return short.new_zeros(()), "stationary_fallback"
+
+
+def history_quality(target_history: torch.Tensor, intervals: torch.Tensor) -> dict:
+    """Return screening indicators; flags are not automatic data rejection."""
+    steps = target_history[1:] - target_history[:-1]
+    if len(intervals) != len(steps) or torch.any(intervals <= 0):
+        raise ValueError("Positive intervals are required for each history step.")
+    short = target_history[-1] - target_history[-5]
+    long = target_history[-1] - target_history[-11]
+    short_norm = torch.linalg.vector_norm(short)
+    long_norm = torch.linalg.vector_norm(long)
+    angle = None
+    if short_norm > 0.1 and long_norm > 0.1:
+        cosine = (torch.dot(short, long) / (short_norm * long_norm)).clamp(-1, 1)
+        angle = torch.rad2deg(torch.acos(cosine)).item()
+    return {
+        "last4_displacement_m": short_norm.item(),
+        "max_step_speed_mps": (torch.linalg.vector_norm(steps, dim=-1) / intervals).max().item(),
+        "last5_repeated_1cm": bool(torch.all(torch.linalg.vector_norm(target_history[-5:] - target_history[-1], dim=-1) < 0.01)),
+        "short_long_angle_deg": angle,
+    }
+
+
 def align_to_target_heading(
     coordinates: torch.Tensor,
     target_history: torch.Tensor,
+    strategy: str = "legacy",
 ) -> torch.Tensor:
-    """
-    Rotate coordinates so the target heading points along positive X.
-    """
-
-    if target_history.shape[0] < 5:
-        raise ValueError("At least five history points are required.")
-
-    # Estimate heading from the latest five history points.
-    heading_vector = target_history[-1] - target_history[-5]
-
-    heading_angle = torch.atan2(
-        heading_vector[1],
-        heading_vector[0],
-    )
-
+    """Rotate coordinates using an observed-history heading estimate."""
+    heading_angle, _ = estimate_heading(target_history, strategy)
     cosine = torch.cos(heading_angle)
     sine = torch.sin(heading_angle)
-
     rotation_matrix = torch.stack(
-        [
-            torch.stack([cosine, -sine]),
-            torch.stack([sine, cosine]),
-        ]
+        [torch.stack([cosine, -sine]), torch.stack([sine, cosine])]
     )
-
     return coordinates @ rotation_matrix

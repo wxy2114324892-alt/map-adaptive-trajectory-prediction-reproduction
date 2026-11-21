@@ -45,9 +45,16 @@ class PipelineTests(unittest.TestCase):
             data.to_csv(modified, index=False)
             other_map = Map()
             other = prepare_scene(modified, other_map)
+            robust_map = Map()
+            robust_other = prepare_scene(modified, robust_map, heading_strategy='robust')
+        robust_original_map = Map()
+        robust_original = prepare_scene(path, robust_original_map, heading_strategy='robust')
         self.assertTrue(torch.equal(scene['histories'], other['histories']))
         self.assertTrue(all((a == b).all() for a, b in zip(amap.calls, other_map.calls)))
         self.assertFalse(torch.equal(scene['future'], other['future']))
+        self.assertTrue(torch.equal(robust_original['histories'], robust_other['histories']))
+        self.assertEqual(robust_original['history_quality'], robust_other['history_quality'])
+        self.assertTrue(all((a == b).all() for a, b in zip(robust_original_map.calls, robust_map.calls)))
 
     def test_missing_target_history_rejected(self):
         path = Path('data/raw/forecasting_sample/data/2645.csv')

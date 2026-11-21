@@ -156,6 +156,7 @@ Their default paths refer to the original local sample, cached validation data a
 - The current objective selects a prediction by minimum ADE and applies Smooth L1 loss. It has not been verified as the exact MTP matching and regression rule cited by the paper.
 - GRU embedding, graph attention configuration and other implementation details differ from or have not been fully checked against the paper. A virtual-node self-loop transformation may not preserve motion features exactly as intended by the paper.
 - Candidate centerlines depend on the available map and the search procedure; scenes that failed preprocessing are excluded and recorded.
+- An optional heading estimator and history-quality indicators are available for low-motion cases; their thresholds are experimental and have not been shown to improve accuracy. See [heading experiment notes](docs/HEADING_EXPERIMENT.md).
 - The replay is open-loop: it replays recorded vehicle motion and visualizes predictions, but has no planner, controller, ROS pipeline or closed-loop safety evaluation.
 - Future work includes checking the loss and architecture against original references, evaluating additional training settings and improving the clean-environment setup.
 
