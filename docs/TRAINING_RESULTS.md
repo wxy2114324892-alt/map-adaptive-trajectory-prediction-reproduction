@@ -44,3 +44,47 @@ To recompute from the saved local metrics file:
 ```
 
 This produces a JSON summary and figure under `outputs/official_full/error_analysis/`. The raw per-scene metrics are local and excluded from Git.
+
+## Comparison with a constant-velocity baseline
+
+We compared the saved model evaluation with a single constant-velocity trajectory on the **same 39,468 processed official validation scenes**. The baseline estimates XY velocity from the last four observed time intervals, using their actual elapsed time, then extrapolates from the final observation for 30 steps at a nominal 0.1 seconds per step. It uses no future positions, map information or other agents as inputs. Cached ground-truth future timestamps are not retained, so the nominal forecast times are an approximation for recordings with irregular intervals.
+
+| Validation metric | Constant velocity (one trajectory) | Model (best of all returned modes) |
+| --- | ---: | ---: |
+| Mean ADE / minADE | 2.597 m | 1.728 m |
+| Median ADE / minADE | 1.848 m | 1.347 m |
+| Mean FDE / minFDE | 5.659 m | 3.369 m |
+| Median FDE / minFDE | 4.138 m | 2.500 m |
+| Endpoint error >2 m | 74.48% | 60.35% |
+
+The model's best-of-set ADE was lower than the baseline in 63.16% of scenes, and its best-of-set FDE was lower in 67.28%. These are **oracle comparisons**: the model returns multiple modes (3–20 in this evaluation), and each metric selects the best mode after observing the true future. The baseline has one output, and the model does not rank its predictions by probability. Therefore these figures do not establish which model trajectory could be selected in advance, nor do they provide a controlled architecture ablation. ADE and FDE can select different model modes. As elsewhere in this report, endpoint miss rate is not a collision or safety rate.
+
+The script also reports groups by observed displacement, enabling inspection of low-motion cases. The comparisons are descriptive; group membership does not establish the causes of errors. Four validation scenes that failed the original preprocessing are absent from both methods. Recompute with the original local cache and per-scene metrics:
+
+```powershell
+.\outputs\python310\python.exe scripts\compare_constant_velocity.py
+```
+
+The script requires exact agreement between cached and reported validation IDs, and saves aggregate and per-scene results to `outputs/official_full/constant_velocity_comparison.json`. It does not retrain or rerun the learned model.
+
+## Selecting one trajectory before the future is known
+
+We reloaded the original one-epoch checkpoint and reran inference for all **39,468 processed validation scenes**. The scene-reasoning and motion-maintaining rows use their fixed output nodes. For a simple history-based selector, we first extrapolate the observed velocity as above, then select the model trajectory whose first ten predicted positions have the lowest mean Euclidean distance to that reference. Selection uses only history and model outputs; the recorded future is used solely for evaluation. It produces one selected trajectory and is an experimental heuristic, not a calibrated confidence score.
+
+| Output | Mean ADE | Mean FDE | Endpoint error >2 m |
+| --- | ---: | ---: | ---: |
+| Constant velocity, single trajectory | 2.597 m | 5.659 m | 74.48% |
+| Model scene-reasoning branch | 6.763 m | 13.065 m | 92.45% |
+| Model motion-maintaining branch | 5.418 m | 10.739 m | 87.43% |
+| Model history-based selected trajectory | 2.584 m | 5.548 m | 77.95% |
+| Model best of all modes, selected using future | 1.728 m | 3.369 m | 60.35% |
+
+The fixed branches perform worse than constant velocity in this evaluation. The simple selector has slightly lower mean errors than constant velocity, but its median errors and endpoint miss rate are higher; this single run does not demonstrate a consistent advantage. The oracle row selects the best mode after seeing ground truth and is not an actionable prediction-time selection. Different ADE and FDE modes may win. The results describe this model, seed, one-epoch checkpoint and processed validation split, not all models or future datasets. They do not establish why branches perform poorly: winner-take-all training may contribute, but that requires controlled experiments. None of these metrics is a safety or collision rate.
+
+The selector is available in `src/utils/mode_selection.py`; it expects predictions and a history-derived reference in the same coordinates and sampling schedule. It is not enabled automatically in the predictor. Cached future timestamps are unavailable, so the reference assumes 0.1-second future steps. Rerun the full comparison, after preparing the matching original cache and checkpoint:
+
+```powershell
+.\outputs\python310\python.exe scripts\evaluate_prediction_branches.py --device cuda --count 0 --seed 2026 --output outputs\official_full\branch_comparison_with_selection.json
+```
+
+Use a positive `--count` for a reproducible random subset. Recomputed inference can show minor numerical differences across environments. Four scenes excluded from the original validation preparation remain excluded.
